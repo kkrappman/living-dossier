@@ -568,8 +568,20 @@ function fmtPhoneOne(x){
 const fmtPhone = s => (s||'').split(' · ').map(fmtPhoneOne).join(' · ');
 const OTHER_SUGGEST = ['First impression & interaction','Goals','Opinions','Values','Dreams','Fears','Hobbies','Skills & talents','Pet peeves','Beliefs','Love language','Life story','Health notes','Topics to avoid','Favorite songs & music taste','Funniest memory','Gift ideas','Favorite food','Things to ask about','Pet names','Inside jokes'];
 
-function parseBday(v){ const m = /^(?:(\d{4})|-)-(\d\d)-(\d\d)$/.exec(v||''); if (!m) return null; const y = m[1] && m[1] !== '1604' ? +m[1] : null; return {y, m:+m[2], d:+m[3]}; }
-function ageFrom(b){ if (!b || !b.y) return null; const t = new Date(); let a = t.getFullYear() - b.y; if (t.getMonth()+1 < b.m || (t.getMonth()+1 === b.m && t.getDate() < b.d)) a--; return a; }
+function parseBday(v){ const m = /^(?:(\d{4})|-)-(\d\d)-(\d\d)$/.exec(v||''); if (!m || +m[2] < 1) return null; const y = m[1] && m[1] !== '1604' ? +m[1] : null; return {y, m:+m[2], d:+m[3] || null}; }
+// with only a birth month, a year is added on the 1st of that month
+function ageFrom(b){ if (!b || !b.y) return null; const t = new Date(); const d = b.d || 1; let a = t.getFullYear() - b.y; if (t.getMonth()+1 < b.m || (t.getMonth()+1 === b.m && t.getDate() < d)) a--; return a; }
+// An age typed in by hand counts up by itself: on their birthday, on the 1st of their birth month, or else every January 1.
+function ageTurnover(p){ const b = parseBday(p.fields && p.fields.birthday); return b ? {m:b.m, d:b.d || 1} : {m:1, d:1}; }
+function currentAge(p){
+  const b = parseBday(p.fields && p.fields.birthday); const exact = ageFrom(b);
+  if (exact != null) return exact;
+  const base = parseInt(p.fields && p.fields.age, 10); if (isNaN(base)) return null;
+  const from = midnight(new Date(p.ageAsOf || p.updatedAt || Date.now())), to = midnight(new Date());
+  const {m, d} = ageTurnover(p); let n = 0;
+  for (let y = from.getFullYear(); y <= to.getFullYear(); y++){ const t = new Date(y, m-1, Math.min(d, new Date(y, m, 0).getDate())); if (t > from && t <= to) n++; }
+  return base + n;
+}
 function nextOcc(m, d){
   const t = midnight(new Date()); let y = t.getFullYear();
   const mk = yy => { const dd = Math.min(d, new Date(yy, m, 0).getDate()); return new Date(yy, m-1, dd); };
@@ -579,7 +591,7 @@ function nextOcc(m, d){
 function upcomingFor(p){
   const out = [];
   const b = parseBday(p.fields && p.fields.birthday);
-  if (b){ const n = nextOcc(b.m, b.d); out.push({...n, p, label:'Birthday', extra: b.y ? `turns ${n.year - b.y}` : ''}); }
+  if (b && b.d){ const n = nextOcc(b.m, b.d); out.push({...n, p, label:'Birthday', extra: b.y ? `turns ${n.year - b.y}` : ''}); }
   for (const dt of p.dates || []){
     if (dt.yearly === false) continue;
     const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(dt.date||''); if (!m) continue;
@@ -1038,6 +1050,9 @@ function detailsSection(p){
   const wrap = section('Details', null, box, sel);
   if (!p.fieldLabels) p.fieldLabels = {};
   if (splitJoined(p)) touch();
+  // pin down when an older typed-in age was entered, so later edits to the card don't restart its count
+  if (p.fields.age && !p.ageAsOf) p.ageAsOf = p.updatedAt || Date.now();
+  let redrawAge = () => {};
   function draw(){
     box.replaceChildren();
     for (const base of FIELDS.filter(f => !f.me || p.isMe)) for (const key of fieldKeys(p, base)){
@@ -1079,16 +1094,29 @@ function detailsSection(p){
         input.addEventListener('input', () => { if (/^1?\d{10}$/.test(input.value.trim())) input.value = fmtPhone(input.value); set(input.value); });
         input.addEventListener('blur', () => { const v = fmtPhone(input.value); if (v !== input.value){ input.value = v; set(v); } });
       }
+      else if (base.k === 'age'){
+        const exact = ageFrom(parseBday(p.fields.birthday));
+        input = h('input', {id, type:'number', inputmode:'numeric', min:0, max:120, value: currentAge(p) ?? p.fields.age, readonly: exact != null});
+        input.addEventListener('input', () => { p.ageAsOf = Date.now(); set(input.value); });
+      }
       else { input = h('input', {id, type:f.t || 'text', value:p.fields[f.k], inputmode: f.t === 'number' ? 'numeric' : f.t === 'email' ? 'email' : null, min:f.min, max:f.max, autocomplete:'off'}); input.addEventListener('input', () => set(input.value)); }
       const cell = h('div', null, input);
       let sub;
       function ageNote(){
+        if (f.k === 'age'){
+          if (!sub){ sub = h('div', {class:'sub'}); cell.append(sub); }
+          const b = parseBday(p.fields.birthday);
+          sub.textContent = ageFrom(b) != null ? 'Worked out from their birthday' : b && b.d ? 'Goes up by one on their birthday' : b ? `Goes up by one on ${MONTHS[b.m-1]} 1` : 'Goes up by one every January 1';
+          return;
+        }
         if (f.k !== 'birthday') return;
         const b = parseBday(p.fields.birthday); const a = ageFrom(b);
         if (!sub){ sub = h('div', {class:'sub'}); cell.append(sub); }
-        sub.textContent = a != null ? `${a} years old` : b ? 'Add a year to see their age' : '';
+        sub.textContent = a != null ? `${a} years old` : b && !b.d ? 'Add a day to get birthday reminders' : b ? 'Add a year to see their age' : '';
+        redrawAge();
       }
       ageNote();
+      if (f.k === 'age') redrawAge = () => { if (!input.isConnected) return; input.readOnly = ageFrom(parseBday(p.fields.birthday)) != null; const v = currentAge(p); if (v != null) input.value = v; ageNote(); };
       let head = h('label', {for: f.t === 'bday' ? id + '-m' : id}, f.l);
       if (base.multi){
         const lab = h('input', {class:'f-name', type:'text', placeholder:'Name it', 'aria-label':`${f.l} name`, value:p.fieldLabels[key] || '', list: base.sug ? 'sug-' + base.k : null, autocomplete:'off'});
@@ -1105,7 +1133,7 @@ function detailsSection(p){
   sel.addEventListener('change', () => {
     const base = FIELDS.find(f => f.k === sel.value); if (!base) return;
     const k = nextFieldKey(p, base);
-    p.fields[k] = ''; draw();
+    p.fields[k] = ''; if (base.k === 'age') p.ageAsOf = Date.now(); draw();
     const el = document.getElementById('f-' + k) || document.getElementById('f-' + k + '-m'); el && el.focus();
   });
   draw();
@@ -1233,7 +1261,7 @@ function bdayInput(v, onChange){
   const d = h('select', {'aria-label':'Day'}, h('option', {value:''}, 'Day'), Array.from({length:31}, (_, i) => h('option', {value:i+1}, i+1)));
   const y = h('input', {type:'number', inputmode:'numeric', placeholder:'Year (optional)', 'aria-label':'Year', min:1900, max:2100, value: b.y || ''});
   if (b.m) m.value = b.m; if (b.d) d.value = b.d;
-  const fire = () => { if (!m.value || !d.value){ onChange(''); return; } const yy = /^\d{4}$/.test(y.value) ? y.value : '-'; onChange(`${yy}-${pad(m.value)}-${pad(d.value)}`); };
+  const fire = () => { if (!m.value){ onChange(''); return; } const yy = /^\d{4}$/.test(y.value) ? y.value : '-'; onChange(`${yy}-${pad(m.value)}-${d.value ? pad(d.value) : '00'}`); };
   m.addEventListener('change', fire); d.addEventListener('change', fire); y.addEventListener('input', fire);
   return h('div', {class:'bday'}, m, d, y);
 }
