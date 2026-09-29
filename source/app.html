@@ -160,6 +160,12 @@ a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
 .parts{display:flex;flex-direction:column;gap:2px}
 .part{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center}
 .part>span{font-size:13px;color:var(--ink-2)}
+.f-head{display:flex;flex-direction:column;gap:2px;min-width:0}
+.f .f-name{font-size:12px;padding:2px 6px;color:var(--ink-2);border-color:var(--line-2);width:100%}
+.unit{font-size:14px;color:var(--muted)}
+.f:has(.f-head){align-items:start}
+.f:has(.f-head)>.x{margin-top:4px}
+@media (max-width:600px){.f-head{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px}.f .f-name{width:auto;flex:1}}
 .f input[hidden],.f a[hidden]{display:none}
 .f:has(.parts,.addr){align-items:start}
 .f:has(.parts,.addr)>label,.f:has(.parts,.addr)>.x{margin-top:6px}
@@ -507,26 +513,26 @@ function confirmBtn(label, armedLabel, action, cls='btn small danger'){
 /* ---------- fields ---------- */
 const FIELDS = [
   {k:'nickname', l:'Nickname'},
-  {k:'phone', l:'Phone', t:'tel'},
-  {k:'email', l:'Email', t:'email'},
+  {k:'phone', l:'Phone', t:'tel', multi:true, sug:['Mobile','Home','Work']},
+  {k:'email', l:'Email', t:'email', multi:true, sug:['Personal','School','Work']},
   {k:'birthday', l:'Birthday', t:'bday'},
   {k:'age', l:'Age', t:'number', min:0, max:120},
   {k:'sex', l:'Sex', t:'select', o:['Female','Male','Intersex','Other']},
   {k:'pronouns', l:'Pronouns', t:'combo', o:['He/him','She/her','They/them','He/they','She/they']},
-  {k:'address', l:'Address', t:'address'},
+  {k:'address', l:'Address', t:'address', multi:true, sug:['Home','Work','School','Mailing']},
   {k:'hometown', l:'Hometown', t:'place'},
   {k:'religion', l:'Religion', t:'combo', o:['Christian','Catholic','Protestant','Orthodox Christian','Latter-day Saint','Jewish','Muslim','Hindu','Buddhist','Sikh','Spiritual','Agnostic','Atheist','Not religious']},
-  {k:'occupation', l:'Occupation'},
-  {k:'employer', l:'Workplace'},
-  {k:'school', l:'School'},
-  {k:'college', l:'College'},
-  {k:'major', l:'Major'},
+  {k:'occupation', l:'Occupation', multi:true},
+  {k:'employer', l:'Workplace', multi:true},
+  {k:'school', l:'School', multi:true},
+  {k:'college', l:'College', multi:true},
+  {k:'major', l:'Major', multi:true, sug:['Major','Minor','Double major']},
   {k:'relationship', l:'Relationship status', t:'combo', o:['Single','Dating','In a relationship','Engaged','Married','Separated','Divorced','Widowed','It’s complicated']},
   {k:'partner', l:'Partner'},
   {k:'children', l:'Children'},
   {k:'politics', l:'Politics', t:'combo', o:['Very liberal','Liberal','Moderate','Conservative','Very conservative','Libertarian','Independent','Not political']},
   {k:'met', l:'Date we met', t:'date'},
-  {k:'website', l:'Website or social', t:'url'},
+  {k:'website', l:'Website or social', t:'url', multi:true, sug:['Instagram','LinkedIn','X','TikTok','Facebook','Website']},
   {k:'bloodType', l:'Blood type', t:'select', o:['A+','A−','B+','B−','AB+','AB−','O+','O−','Not sure'], me:true},
   {k:'height', l:'Height', t:'height', me:true},
   {k:'weight', l:'Weight', t:'weight', me:true},
@@ -534,11 +540,24 @@ const FIELDS = [
   {k:'medical', l:'Medical history', t:'textarea', me:true},
   {k:'allergies', l:'Allergies', t:'textarea', me:true},
   {k:'medications', l:'Medications', t:'textarea', me:true},
-  {k:'emergency', l:'Emergency contact', t:'parts', me:true, parts:[{l:'Name'},{l:'Relationship'},{l:'Phone', t:'tel'}]},
+  {k:'emergency', l:'Emergency contact', t:'parts', me:true, multi:true, parts:[{l:'Name'},{l:'Relationship'},{l:'Phone', t:'tel'}]},
   {k:'sizes', l:'Clothing sizes', t:'parts', me:true, parts:[{l:'Shirt', o:['XS','S','M','L','XL','XXL','XXXL']},{l:'Pants', subs:['Waist','Length'], j:'×', n:true},{l:'Shoe', n:true},{l:'Jacket'}]},
   {k:'eyes', l:'Eye prescription', t:'parts', me:true, parts:[{l:'Right eye', subs:['Sphere','Cylinder','Axis'], j:' / '},{l:'Left eye', subs:['Sphere','Cylinder','Axis'], j:' / '},{l:'Pupil distance', n:true}]},
-  {k:'insurance', l:'Insurance', t:'parts', me:true, parts:[{l:'Provider'},{l:'Plan'},{l:'Member ID'},{l:'Group number'},{l:'Phone', t:'tel'}]},
+  {k:'insurance', l:'Insurance', t:'parts', me:true, multi:true, sug:['Medical','Dental','Vision','Car','Renters','Life'], parts:[{l:'Provider'},{l:'Plan'},{l:'Member ID'},{l:'Group number'},{l:'Phone', t:'tel'}]},
 ];
+const fieldKeys = (p, f) => [...(f.k in p.fields ? [f.k] : []), ...Object.keys(p.fields).filter(k => k.startsWith(f.k + '.')).sort((a, b) => +a.split('.')[1] - +b.split('.')[1])];
+function nextFieldKey(p, f){ if (!(f.k in p.fields)) return f.k; let n = 2; while ((f.k + '.' + n) in p.fields) n++; return f.k + '.' + n; }
+// older cards kept several phones or emails in one box joined with " · "; give each its own row
+function splitJoined(p){
+  let changed = false;
+  for (const k of ['phone', 'email']){
+    const v = p.fields[k]; if (!v || !v.includes(' · ')) continue;
+    const [first, ...rest] = v.split(' · ').map(x => x.trim()).filter(Boolean);
+    p.fields[k] = first; changed = true;
+    for (const r of rest) p.fields[nextFieldKey(p, {k})] = r;
+  }
+  return changed;
+}
 function fmtPhoneOne(x){
   const t = (x||'').trim(); let d = t.replace(/\D/g, '');
   if (/^\+(?!1)/.test(t)) return t;
@@ -826,7 +845,7 @@ const stripHtml = x => (x||'').replace(/<(br|\/p|\/div|\/li)[^>]*>/gi, ' ').repl
 function searchFields(p){
   const f = p.fields || {};
   const out = [[100, 'Name', p.name], [70, 'Nickname', f.nickname], [55, 'Tags', (p.tags||[]).join(' · ')], [50, 'How I know them', p.how]];
-  for (const d of FIELDS) if (d.k !== 'nickname' && f[d.k]) out.push([35, d.l, String(f[d.k])]);
+  for (const d of FIELDS) if (d.k !== 'nickname') for (const k of fieldKeys({fields:f}, d)) if (f[k]) out.push([35, (p.fieldLabels && p.fieldLabels[k]) ? `${d.l} (${p.fieldLabels[k]})` : d.l, String(f[k])]);
   for (const o of p.other||[]){ out.push([25, 'Other info', o.title]); out.push([12, o.title || 'Other info', stripHtml(o.html)]); }
   for (const g of p.gifts||[]) out.push([22, 'Gifts', [g.item, g.occasion].filter(Boolean).join(' · ')]);
   for (const d of p.dates||[]) out.push([22, 'Dates', d.label]);
@@ -934,8 +953,8 @@ function renderHome(){
     h('div', {class:'sec'}, h('div', {class:'sec-h'}, h('h2', null, 'Coming up'), h('span', {class:'hint'}, 'Next 90 days')), h('div', {class:'card'}, upcomingList(90)))));
 }
 
-function blankPerson(){ return {id:uid(), name:'', how:'', fields:{}, personality:'', thoughts:[], other:[], dates:[], media:[], connections:[], tags:[], gifts:[], pinned:false, photo:null, createdAt:Date.now(), updatedAt:Date.now()}; }
-function normalize(p){ return Object.assign(blankPerson(), clone(p), {fields:Object.assign({}, p.fields||{})}); }
+function blankPerson(){ return {id:uid(), name:'', how:'', fields:{}, fieldLabels:{}, personality:'', thoughts:[], other:[], dates:[], media:[], connections:[], tags:[], gifts:[], pinned:false, photo:null, createdAt:Date.now(), updatedAt:Date.now()}; }
+function normalize(p){ return Object.assign(blankPerson(), clone(p), {fields:Object.assign({}, p.fields||{}), fieldLabels:Object.assign({}, p.fieldLabels||{})}); }
 function leaveCurrent(){ if (saveT) flush(); }
 function openPerson(id){
   leaveCurrent();
@@ -1017,10 +1036,12 @@ function detailsSection(p){
   const box = h('div', {class:'fields'});
   const sel = h('select', {class:'add-detail', 'aria-label':'Add a detail'});
   const wrap = section('Details', null, box, sel);
+  if (!p.fieldLabels) p.fieldLabels = {};
+  if (splitJoined(p)) touch();
   function draw(){
     box.replaceChildren();
-    for (const f of FIELDS.filter(f => !f.me || p.isMe)){
-      if (!(f.k in p.fields)) continue;
+    for (const base of FIELDS.filter(f => !f.me || p.isMe)) for (const key of fieldKeys(p, base)){
+      const f = Object.assign({}, base, {k:key});
       const id = 'f-' + f.k;
       let input;
       const set = v => { p.fields[f.k] = v; touch(); };
@@ -1032,7 +1053,7 @@ function detailsSection(p){
       else if (f.t === 'parts') input = partsInput(f, p.fields[f.k], set);
       else if (f.t === 'place') input = placeInput(f, p.fields[f.k], set);
       else if (f.t === 'address'){
-        input = addressInput(p.fields[f.k], set);
+        input = addressInput(p.fields[f.k], set, id);
         // ask about keeping the old address once the edit is finished (focus leaves the address boxes)
         let before = p.fields[f.k] || '';
         input.addEventListener('focusout', e => {
@@ -1053,7 +1074,7 @@ function detailsSection(p){
       else if (f.t === 'textarea'){
         input = h('textarea', {id, rows:2, value:p.fields[f.k]}); input.addEventListener('input', () => set(input.value));
       }
-      else if (f.k === 'phone'){
+      else if (base.k === 'phone'){
         input = h('input', {id, type:'tel', value:fmtPhone(p.fields[f.k]), autocomplete:'off'});
         input.addEventListener('input', () => { if (/^1?\d{10}$/.test(input.value.trim())) input.value = fmtPhone(input.value); set(input.value); });
         input.addEventListener('blur', () => { const v = fmtPhone(input.value); if (v !== input.value){ input.value = v; set(v); } });
@@ -1068,15 +1089,22 @@ function detailsSection(p){
         sub.textContent = a != null ? `${a} years old` : b ? 'Add a year to see their age' : '';
       }
       ageNote();
-      box.append(h('div', {class:'f'}, h('label', {for: f.t === 'bday' ? id + '-m' : id}, f.l), cell,
-        h('button', {class:'x', type:'button', title:`Remove ${f.l}`, 'aria-label':`Remove ${f.l}`, onclick: () => { delete p.fields[f.k]; touch(); draw(); }}, svg(ICON.x))));
+      let head = h('label', {for: f.t === 'bday' ? id + '-m' : id}, f.l);
+      if (base.multi){
+        const lab = h('input', {class:'f-name', type:'text', placeholder:'Name it', 'aria-label':`${f.l} name`, value:p.fieldLabels[key] || '', list: base.sug ? 'sug-' + base.k : null, autocomplete:'off'});
+        lab.addEventListener('input', () => { const t = lab.value.trim(); if (t) p.fieldLabels[key] = lab.value; else delete p.fieldLabels[key]; touch(); });
+        head = h('div', {class:'f-head'}, head, lab, base.sug ? h('datalist', {id:'sug-' + base.k}, base.sug.map(o => h('option', {value:o}))) : null);
+      }
+      box.append(h('div', {class:'f'}, head, cell,
+        h('button', {class:'x', type:'button', title:`Remove ${f.l}`, 'aria-label':`Remove ${f.l}`, onclick: () => { delete p.fields[key]; delete p.fieldLabels[key]; touch(); draw(); }}, svg(ICON.x))));
     }
-    const unused = FIELDS.filter(f => (!f.me || p.isMe) && !(f.k in p.fields));
-    sel.replaceChildren(h('option', {value:''}, unused.length ? `+ Add a detail (${unused.length} more)` : 'All details added'), ...unused.map(f => h('option', {value:f.k}, f.l)));
+    const unused = FIELDS.filter(f => (!f.me || p.isMe) && (f.multi || !fieldKeys(p, f).length));
+    sel.replaceChildren(h('option', {value:''}, unused.length ? '+ Add a detail' : 'All details added'), ...unused.map(f => h('option', {value:f.k}, fieldKeys(p, f).length ? `${f.l} (another)` : f.l)));
     sel.disabled = !unused.length;
   }
   sel.addEventListener('change', () => {
-    const k = sel.value; if (!k) return;
+    const base = FIELDS.find(f => f.k === sel.value); if (!base) return;
+    const k = nextFieldKey(p, base);
     p.fields[k] = ''; draw();
     const el = document.getElementById('f-' + k) || document.getElementById('f-' + k + '-m'); el && el.focus();
   });
@@ -1112,13 +1140,11 @@ function heightInput(v, onChange){
   return h('div', {class:'multi'}, ft, inch);
 }
 function weightInput(v, onChange){
-  const m = /([\d.]+)\s*(kg|lb|lbs|pounds)?/i.exec(v||'');
-  const num = h('input', {id:'f-weight', type:'number', inputmode:'decimal', min:0, step:'any', placeholder:'Weight', 'aria-label':'Weight', value: m ? m[1] : ''});
-  const unit = h('select', {'aria-label':'Unit'}, h('option', {value:'lb'}, 'lb'), h('option', {value:'kg'}, 'kg'));
-  unit.value = m && /kg/i.test(m[2]||'') ? 'kg' : 'lb';
-  const fire = () => onChange(num.value ? `${num.value} ${unit.value}` : '');
-  num.addEventListener('input', fire); unit.addEventListener('change', fire);
-  return h('div', {class:'multi'}, num, unit);
+  const m = /([\d.]+)\s*(kg)?/i.exec(v||'');
+  const lb = !m ? '' : m[2] ? String(Math.round(+m[1] * 2.20462)) : m[1];
+  const num = h('input', {id:'f-weight', type:'number', inputmode:'decimal', min:0, step:'any', placeholder:'Weight', 'aria-label':'Weight in pounds', value:lb});
+  num.addEventListener('input', () => onChange(num.value ? `${num.value} lbs` : ''));
+  return h('div', {class:'multi'}, num, h('span', {class:'unit'}, 'lbs'));
 }
 function urlInput(f, v, onChange){
   const inp = h('input', {id:'f-' + f.k, type:'url', inputmode:'url', placeholder:'instagram.com/name or a web address', value:v||'', autocomplete:'off'});
@@ -1185,11 +1211,11 @@ function addressText(r){
   const last = [r.city, [r.state, r.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   return [r.street, r.unit, last, r.country].map(x => (x||'').trim()).filter(Boolean).join('\n');
 }
-function addressInput(v, onChange){
+function addressInput(v, onChange, id){
   const r = parseAddress(v);
   const mk = (k, ph, extra) => { const el = h('input', Object.assign({type:'text', placeholder:ph, 'aria-label':ph, value:r[k], autocomplete:'off'}, extra||{})); el.addEventListener('input', () => { r[k] = el.value; onChange(addressText(r)); }); return el; };
   return h('div', {class:'addr'},
-    mk('street', 'Street', {id:'f-address'}), mk('unit', 'Apt, suite, unit'),
+    mk('street', 'Street', {id}), mk('unit', 'Apt, suite, unit'),
     h('div', {class:'multi'}, mk('city', 'City'), mk('state', 'State'), mk('zip', 'ZIP', {inputmode:'numeric'})),
     mk('country', 'Country (if not US)'));
 }
@@ -1659,12 +1685,14 @@ function parseVcf(text){
     p.name = name;
     const f = p.fields;
     const nick = get('NICKNAME')[0]; if (nick) f.nickname = unesc(nick.value);
-    const tels = get('TEL').map(t => unesc(t.value).trim()).filter(Boolean); if (tels.length) f.phone = [...new Set(tels.map(fmtPhoneOne))].join(' · ');
-    const ems = get('EMAIL').map(t => unesc(t.value).trim()).filter(Boolean); if (ems.length) f.email = [...new Set(ems)].join(' · ');
-    const adr = get('ADR')[0]; if (adr){ const a = adr.value.split(';').map(unesc); const s = [a[2], [a[3], a[4]].filter(Boolean).join(', ') + (a[5] ? ' ' + a[5] : ''), a[6]].map(x => (x||'').trim()).filter(Boolean).join('\n'); if (s) f.address = s; }
+    const typeName = pr => { const l = labelFor(pr.group); if (l) return l.charAt(0).toUpperCase() + l.slice(1); const t = /TYPE=([A-Z]+)/.exec(pr.params.replace(/TYPE=(PREF|VOICE|INTERNET|X-INTERNET)[;,]?/g, '')); const map = {CELL:'Mobile', IPHONE:'iPhone', HOME:'Home', WORK:'Work', MAIN:'Main', OTHER:'Other'}; return t ? (map[t[1]] || '') : ''; };
+    const addMany = (k, items) => { const seen = new Set(); for (const [v, lab] of items){ if (!v || seen.has(v)) continue; seen.add(v); const key = nextFieldKey(p, {k}); f[key] = v; if (lab) p.fieldLabels[key] = lab; } };
+    addMany('phone', get('TEL').map(t => [fmtPhoneOne(unesc(t.value).trim()), typeName(t)]));
+    addMany('email', get('EMAIL').map(t => [unesc(t.value).trim(), typeName(t)]));
+    addMany('address', get('ADR').map(adr => { const a = adr.value.split(';').map(unesc); return [[a[2], [a[3], a[4]].filter(Boolean).join(', ') + (a[5] ? ' ' + a[5] : ''), a[6]].map(x => (x||'').trim()).filter(Boolean).join('\n'), typeName(adr)]; }));
     if (org) f.employer = org;
     const title = get('TITLE')[0]; if (title) f.occupation = unesc(title.value);
-    const url = get('URL')[0]; if (url) f.website = unesc(url.value);
+    addMany('website', get('URL').map(u => [unesc(u.value).trim(), typeName(u)]));
     const bd = get('BDAY')[0];
     if (bd){ const v = bd.value.trim(); let m = /^(\d{4})-?(\d\d)-?(\d\d)/.exec(v); const m2 = /^--(\d\d)-?(\d\d)/.exec(v);
       if (m) f.birthday = `${m[1] === '1604' ? '-' : m[1]}-${m[2]}-${m[3]}`; else if (m2) f.birthday = `--${m2[1]}-${m2[2]}`; }
