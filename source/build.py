@@ -1,6 +1,6 @@
 # Wraps the shared app source into the home-screen app (index.html at the repo root)
 import re, pathlib
-src = pathlib.Path(__file__).parent / 'app.html'.read_text()
+src = (pathlib.Path(__file__).parent / 'app.html').read_text()
 head = '''<!doctype html>
 <html lang="en">
 <head>
