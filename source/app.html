@@ -151,6 +151,19 @@ h1,h2,h3{text-wrap:balance;margin:0}
 .f textarea{resize:vertical;min-height:54px}
 .f .sub{font-size:12px;color:var(--muted);padding:0 7px}
 .bday{display:flex;gap:6px;flex-wrap:wrap}
+.multi{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.multi>input,.multi>select{width:auto;flex:1 1 80px;min-width:0}
+.multi>.btn{flex:0 0 auto}
+a.btn{text-decoration:none;color:inherit;display:inline-flex;align-items:center}
+.multi input,.multi select,.addr input,.parts input,.parts select,.parts textarea{border-color:var(--line-2)}
+.addr{display:flex;flex-direction:column;gap:4px}
+.parts{display:flex;flex-direction:column;gap:2px}
+.part{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center}
+.part>span{font-size:13px;color:var(--ink-2)}
+.f input[hidden],.f a[hidden]{display:none}
+.f:has(.parts,.addr){align-items:start}
+.f:has(.parts,.addr)>label,.f:has(.parts,.addr)>.x{margin-top:6px}
+@media (max-width:600px){.part{grid-template-columns:88px minmax(0,1fr)}}
 .bday select{width:auto;flex:1 1 90px}
 .bday input{width:auto;flex:1 1 90px}
 .x{border:0;background:transparent;color:var(--muted);border-radius:6px;width:30px;height:30px;display:grid;place-items:center}
@@ -497,34 +510,34 @@ const FIELDS = [
   {k:'phone', l:'Phone', t:'tel'},
   {k:'email', l:'Email', t:'email'},
   {k:'birthday', l:'Birthday', t:'bday'},
-  {k:'age', l:'Age', t:'number'},
+  {k:'age', l:'Age', t:'number', min:0, max:120},
   {k:'sex', l:'Sex', t:'select', o:['Female','Male','Intersex','Other']},
-  {k:'pronouns', l:'Pronouns'},
-  {k:'address', l:'Address', t:'textarea'},
-  {k:'hometown', l:'Hometown'},
-  {k:'religion', l:'Religion'},
+  {k:'pronouns', l:'Pronouns', t:'combo', o:['He/him','She/her','They/them','He/they','She/they']},
+  {k:'address', l:'Address', t:'address'},
+  {k:'hometown', l:'Hometown', t:'place'},
+  {k:'religion', l:'Religion', t:'combo', o:['Christian','Catholic','Protestant','Orthodox Christian','Latter-day Saint','Jewish','Muslim','Hindu','Buddhist','Sikh','Spiritual','Agnostic','Atheist','Not religious']},
   {k:'occupation', l:'Occupation'},
   {k:'employer', l:'Workplace'},
   {k:'school', l:'School'},
   {k:'college', l:'College'},
   {k:'major', l:'Major'},
-  {k:'relationship', l:'Relationship status'},
+  {k:'relationship', l:'Relationship status', t:'combo', o:['Single','Dating','In a relationship','Engaged','Married','Separated','Divorced','Widowed','It’s complicated']},
   {k:'partner', l:'Partner'},
   {k:'children', l:'Children'},
-  {k:'politics', l:'Politics'},
+  {k:'politics', l:'Politics', t:'combo', o:['Very liberal','Liberal','Moderate','Conservative','Very conservative','Libertarian','Independent','Not political']},
   {k:'met', l:'Date we met', t:'date'},
-  {k:'website', l:'Website or social'},
+  {k:'website', l:'Website or social', t:'url'},
   {k:'bloodType', l:'Blood type', t:'select', o:['A+','A−','B+','B−','AB+','AB−','O+','O−','Not sure'], me:true},
-  {k:'height', l:'Height', me:true},
-  {k:'weight', l:'Weight', me:true},
-  {k:'measurements', l:'Measurements', t:'textarea', me:true},
+  {k:'height', l:'Height', t:'height', me:true},
+  {k:'weight', l:'Weight', t:'weight', me:true},
+  {k:'measurements', l:'Measurements', t:'parts', me:true, parts:[{l:'Chest', u:'in'},{l:'Waist', u:'in'},{l:'Hips', u:'in'},{l:'Neck', u:'in'},{l:'Sleeve', u:'in'},{l:'Inseam', u:'in'}]},
   {k:'medical', l:'Medical history', t:'textarea', me:true},
   {k:'allergies', l:'Allergies', t:'textarea', me:true},
   {k:'medications', l:'Medications', t:'textarea', me:true},
-  {k:'emergency', l:'Emergency contact', t:'textarea', me:true},
-  {k:'sizes', l:'Clothing sizes', t:'textarea', me:true},
-  {k:'eyes', l:'Eye prescription', t:'textarea', me:true},
-  {k:'insurance', l:'Insurance', t:'textarea', me:true},
+  {k:'emergency', l:'Emergency contact', t:'parts', me:true, parts:[{l:'Name'},{l:'Relationship'},{l:'Phone', t:'tel'}]},
+  {k:'sizes', l:'Clothing sizes', t:'parts', me:true, parts:[{l:'Shirt', o:['XS','S','M','L','XL','XXL','XXXL']},{l:'Pants', subs:['Waist','Length'], j:'×', n:true},{l:'Shoe', n:true},{l:'Jacket'}]},
+  {k:'eyes', l:'Eye prescription', t:'parts', me:true, parts:[{l:'Right eye', subs:['Sphere','Cylinder','Axis'], j:' / '},{l:'Left eye', subs:['Sphere','Cylinder','Axis'], j:' / '},{l:'Pupil distance', n:true}]},
+  {k:'insurance', l:'Insurance', t:'parts', me:true, parts:[{l:'Provider'},{l:'Plan'},{l:'Member ID'},{l:'Group number'},{l:'Phone', t:'tel'}]},
 ];
 function fmtPhoneOne(x){
   const t = (x||'').trim(); let d = t.replace(/\D/g, '');
@@ -1012,32 +1025,40 @@ function detailsSection(p){
       let input;
       const set = v => { p.fields[f.k] = v; touch(); };
       if (f.t === 'bday') input = bdayInput(p.fields[f.k], v => { set(v); ageNote(); });
+      else if (f.t === 'combo') input = comboInput(f, p.fields[f.k], set);
+      else if (f.t === 'height') input = heightInput(p.fields[f.k], set);
+      else if (f.t === 'weight') input = weightInput(p.fields[f.k], set);
+      else if (f.t === 'url') input = urlInput(f, p.fields[f.k], set);
+      else if (f.t === 'parts') input = partsInput(f, p.fields[f.k], set);
+      else if (f.t === 'place') input = placeInput(f, p.fields[f.k], set);
+      else if (f.t === 'address'){
+        input = addressInput(p.fields[f.k], set);
+        // ask about keeping the old address once the edit is finished (focus leaves the address boxes)
+        let before = p.fields[f.k] || '';
+        input.addEventListener('focusout', e => {
+          if (input.contains(e.relatedTarget)) return;
+          const oldV = before.trim(), newV = (p.fields[f.k] || '').trim(); before = p.fields[f.k] || '';
+          if (!oldV || !newV || oldV === newV) return;
+          cell.querySelector('.addr-ask')?.remove();
+          const ask = h('div', {class:'addr-ask', role:'group', 'aria-label':'Keep the old address?'},
+            h('div', null, 'You changed the address. Keep the old one in Previous addresses?'),
+            h('div', {class:'old'}, oldV),
+            h('div', {class:'row'},
+              h('button', {class:'btn small primary', type:'button', onclick: () => { ask.remove(); archiveAddress(p, oldV); toast('Old address saved under Other info'); }}, 'Yes, keep it'),
+              h('button', {class:'btn small', type:'button', onclick: () => ask.remove()}, 'No, I fixed a typo')));
+          cell.append(ask);
+        });
+      }
       else if (f.t === 'select'){ input = h('select', {id}, h('option', {value:''}, 'Choose…'), f.o.map(o => h('option', {value:o}, o))); input.value = p.fields[f.k] || ''; input.addEventListener('change', () => set(input.value)); }
       else if (f.t === 'textarea'){
         input = h('textarea', {id, rows:2, value:p.fields[f.k]}); input.addEventListener('input', () => set(input.value));
-        if (f.k === 'address'){
-          let before = '';
-          input.addEventListener('focus', () => { before = input.value; });
-          input.addEventListener('change', () => {
-            const oldV = before.trim(), newV = input.value.trim(); before = input.value;
-            if (!oldV || !newV || oldV === newV) return;
-            cell.querySelector('.addr-ask')?.remove();
-            const ask = h('div', {class:'addr-ask', role:'group', 'aria-label':'Keep the old address?'},
-              h('div', null, 'You changed the address. Keep the old one in Previous addresses?'),
-              h('div', {class:'old'}, oldV),
-              h('div', {class:'row'},
-                h('button', {class:'btn small primary', type:'button', onclick: () => { ask.remove(); archiveAddress(p, oldV); toast('Old address saved under Other info'); }}, 'Yes, keep it'),
-                h('button', {class:'btn small', type:'button', onclick: () => ask.remove()}, 'No, I fixed a typo')));
-            cell.append(ask);
-          });
-        }
       }
       else if (f.k === 'phone'){
         input = h('input', {id, type:'tel', value:fmtPhone(p.fields[f.k]), autocomplete:'off'});
         input.addEventListener('input', () => { if (/^1?\d{10}$/.test(input.value.trim())) input.value = fmtPhone(input.value); set(input.value); });
         input.addEventListener('blur', () => { const v = fmtPhone(input.value); if (v !== input.value){ input.value = v; set(v); } });
       }
-      else { input = h('input', {id, type:f.t || 'text', value:p.fields[f.k], inputmode: f.t === 'number' ? 'numeric' : null, autocomplete:'off'}); input.addEventListener('input', () => set(input.value)); }
+      else { input = h('input', {id, type:f.t || 'text', value:p.fields[f.k], inputmode: f.t === 'number' ? 'numeric' : f.t === 'email' ? 'email' : null, min:f.min, max:f.max, autocomplete:'off'}); input.addEventListener('input', () => set(input.value)); }
       const cell = h('div', null, input);
       let sub;
       function ageNote(){
@@ -1061,6 +1082,124 @@ function detailsSection(p){
   });
   draw();
   return wrap;
+}
+/* structured detail inputs; every value is still saved as plain readable text */
+function comboInput(f, v, onChange){
+  const other = v && !f.o.includes(v);
+  const sel = h('select', {id:'f-' + f.k}, h('option', {value:''}, 'Choose…'), f.o.map(o => h('option', {value:o}, o)), h('option', {value:'__other'}, 'Other…'));
+  const txt = h('input', {type:'text', placeholder:'Type it', 'aria-label':f.l, value: other ? v : '', autocomplete:'off'});
+  sel.value = other ? '__other' : (v || '');
+  const sync = () => { txt.hidden = sel.value !== '__other'; };
+  sel.addEventListener('change', () => { sync(); if (sel.value === '__other'){ txt.focus(); onChange(txt.value); } else onChange(sel.value); });
+  txt.addEventListener('input', () => onChange(txt.value));
+  sync();
+  return h('div', {class:'multi'}, sel, txt);
+}
+function parseHeight(v){
+  const t = (v||'').trim(); let m;
+  if ((m = /^(\d)\s*(?:'|ft|feet)\s*(\d{1,2})?/i.exec(t))) return {ft:+m[1], inch: m[2] ? +m[2] : 0};
+  if ((m = /^(\d{2,3})\s*(?:"|in)/i.exec(t))) return {ft:Math.floor(+m[1]/12), inch:+m[1]%12};
+  if ((m = /^(\d{3})\s*cm/i.exec(t))) { const i = Math.round(+m[1]/2.54); return {ft:Math.floor(i/12), inch:i%12}; }
+  return null;
+}
+function heightInput(v, onChange){
+  const cur = parseHeight(v) || {};
+  const ft = h('select', {id:'f-height', 'aria-label':'Feet'}, h('option', {value:''}, 'ft'), [3,4,5,6,7,8].map(n => h('option', {value:n}, `${n} ft`)));
+  const inch = h('select', {'aria-label':'Inches'}, h('option', {value:''}, 'in'), Array.from({length:12}, (_, i) => h('option', {value:i}, `${i} in`)));
+  if (cur.ft != null){ ft.value = cur.ft; inch.value = cur.inch; }
+  const fire = () => onChange(ft.value ? `${ft.value}' ${inch.value || 0}"` : '');
+  ft.addEventListener('change', () => { if (ft.value && inch.value === '') inch.value = 0; fire(); }); inch.addEventListener('change', fire);
+  return h('div', {class:'multi'}, ft, inch);
+}
+function weightInput(v, onChange){
+  const m = /([\d.]+)\s*(kg|lb|lbs|pounds)?/i.exec(v||'');
+  const num = h('input', {id:'f-weight', type:'number', inputmode:'decimal', min:0, step:'any', placeholder:'Weight', 'aria-label':'Weight', value: m ? m[1] : ''});
+  const unit = h('select', {'aria-label':'Unit'}, h('option', {value:'lb'}, 'lb'), h('option', {value:'kg'}, 'kg'));
+  unit.value = m && /kg/i.test(m[2]||'') ? 'kg' : 'lb';
+  const fire = () => onChange(num.value ? `${num.value} ${unit.value}` : '');
+  num.addEventListener('input', fire); unit.addEventListener('change', fire);
+  return h('div', {class:'multi'}, num, unit);
+}
+function urlInput(f, v, onChange){
+  const inp = h('input', {id:'f-' + f.k, type:'url', inputmode:'url', placeholder:'instagram.com/name or a web address', value:v||'', autocomplete:'off'});
+  const href = () => { const t = inp.value.trim(); return !t ? '' : /^https?:\/\//i.test(t) ? t : /^@\w/.test(t) ? '' : /\.\w{2,}/.test(t) ? 'https://' + t : ''; };
+  const open = h('a', {class:'btn small', target:'_blank', rel:'noopener'}, 'Open');
+  const sync = () => { const u = href(); open.hidden = !u; if (u) open.href = u; };
+  inp.addEventListener('input', () => { sync(); onChange(inp.value); }); sync();
+  return h('div', {class:'multi'}, inp, open);
+}
+// Lines of "Label: value"; lines it doesn't recognise are kept as notes.
+function parseParts(f, v){
+  const out = {}, notes = [];
+  for (const line of (v||'').split('\n')){
+    const m = /^([^:]{1,30}):\s*(.*)$/.exec(line.trim());
+    const part = m && f.parts.find(x => x.l.toLowerCase() === m[1].trim().toLowerCase());
+    if (part) out[part.l] = m[2]; else if (line.trim()) notes.push(line);
+  }
+  return {out, notes:notes.join('\n')};
+}
+function partsInput(f, v, onChange){
+  const {out, notes} = parseParts(f, v);
+  const vals = Object.assign({}, out);
+  const note = h('textarea', {rows:1, placeholder:'Notes', 'aria-label':`${f.l} notes`, value:notes});
+  const fire = () => {
+    const lines = f.parts.filter(x => (vals[x.l]||'').replace(/[\s×/]/g, '')).map(x => `${x.l}: ${vals[x.l]}`);
+    if (note.value.trim()) lines.push(note.value.trim());
+    onChange(lines.join('\n'));
+  };
+  const rows = f.parts.map((x, i) => {
+    const id = i === 0 ? 'f-' + f.k : null;
+    let ctl;
+    if (x.subs){
+      const bits = (vals[x.l]||'').split(x.j.trim() === '/' ? /\s*\/\s*/ : /\s*[x×]\s*/i);
+      const ins = x.subs.map((sl, j) => h('input', {id: j === 0 ? id : null, type:'text', inputmode: x.n ? 'decimal' : 'text', placeholder:sl, 'aria-label':`${x.l} ${sl}`, value:bits[j]||'', autocomplete:'off'}));
+      ins.forEach(inp => inp.addEventListener('input', () => { vals[x.l] = ins.some(q => q.value.trim()) ? ins.map(q => q.value.trim()).join(x.j) : ''; fire(); }));
+      ctl = h('div', {class:'multi'}, ...ins);
+    } else if (x.o){
+      ctl = h('select', {id, 'aria-label':x.l}, h('option', {value:''}, 'Choose…'), x.o.map(o => h('option', {value:o}, o)));
+      ctl.value = vals[x.l] || ''; ctl.addEventListener('change', () => { vals[x.l] = ctl.value; fire(); });
+    } else {
+      const cur = x.u ? (vals[x.l]||'').replace(new RegExp('\\s*' + x.u + '$'), '') : (vals[x.l]||'');
+      ctl = h('input', {id, type: x.t === 'tel' ? 'tel' : 'text', inputmode: x.u || x.n ? 'decimal' : null, placeholder: x.u ? x.u : '', 'aria-label':x.l, value: x.t === 'tel' ? fmtPhone(cur) : cur, autocomplete:'off'});
+      ctl.addEventListener('input', () => { const t = ctl.value.trim(); vals[x.l] = t ? (x.u ? `${t} ${x.u}` : t) : ''; fire(); });
+      if (x.t === 'tel') ctl.addEventListener('blur', () => { const t = fmtPhone(ctl.value); if (t !== ctl.value){ ctl.value = t; vals[x.l] = t; fire(); } });
+    }
+    return h('div', {class:'part'}, h('span', null, x.l), ctl);
+  });
+  note.addEventListener('input', fire);
+  return h('div', {class:'parts'}, ...rows, h('div', {class:'part'}, h('span', null, 'Notes'), note));
+}
+// Addresses stay as the familiar block of text: street, unit, "City, ST ZIP", country.
+function parseAddress(v){
+  const lines = (v||'').split('\n').map(x => x.trim()).filter(Boolean);
+  const r = {street:'', unit:'', city:'', state:'', zip:'', country:''};
+  const i = lines.findIndex(l => /^[^,]+,\s*[A-Za-z .]+(\s+[\w-]{3,10})?$/.test(l));
+  if (i < 0){ r.street = lines.join(', '); return r; }
+  const m = /^([^,]+),\s*([A-Za-z .]*?)(?:\s+([\w-]*\d[\w-]*))?$/.exec(lines[i]);
+  r.city = m[1].trim(); r.state = (m[2]||'').trim(); r.zip = m[3] || '';
+  r.street = lines[0] && i > 0 ? lines[0] : ''; r.unit = i > 1 ? lines.slice(1, i).join(', ') : '';
+  r.country = lines.slice(i+1).join(', ');
+  return r;
+}
+function addressText(r){
+  const last = [r.city, [r.state, r.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return [r.street, r.unit, last, r.country].map(x => (x||'').trim()).filter(Boolean).join('\n');
+}
+function addressInput(v, onChange){
+  const r = parseAddress(v);
+  const mk = (k, ph, extra) => { const el = h('input', Object.assign({type:'text', placeholder:ph, 'aria-label':ph, value:r[k], autocomplete:'off'}, extra||{})); el.addEventListener('input', () => { r[k] = el.value; onChange(addressText(r)); }); return el; };
+  return h('div', {class:'addr'},
+    mk('street', 'Street', {id:'f-address'}), mk('unit', 'Apt, suite, unit'),
+    h('div', {class:'multi'}, mk('city', 'City'), mk('state', 'State'), mk('zip', 'ZIP', {inputmode:'numeric'})),
+    mk('country', 'Country (if not US)'));
+}
+function placeInput(f, v, onChange){
+  const bits = (v||'').split(/\s*,\s*/);
+  const city = h('input', {id:'f-' + f.k, type:'text', placeholder:'City', 'aria-label':'City', value:bits[0]||'', autocomplete:'off'});
+  const region = h('input', {type:'text', placeholder:'State or country', 'aria-label':'State or country', value:bits.slice(1).join(', '), autocomplete:'off'});
+  const fire = () => onChange([city.value.trim(), region.value.trim()].filter(Boolean).join(', '));
+  city.addEventListener('input', fire); region.addEventListener('input', fire);
+  return h('div', {class:'multi'}, city, region);
 }
 function bdayInput(v, onChange){
   const b = parseBday(v) || {};
