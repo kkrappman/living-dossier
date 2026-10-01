@@ -842,7 +842,18 @@ function avatar(p, big){
 function sortKey(p){
   const n = (p.name||'').trim(); if (!n) return '~';
   if (display.sort !== 'last') return n;
-  const w = n.split(/\s+/); return w.length > 1 ? w[w.length-1] + ' ' + w.slice(0,-1).join(' ') : n;
+  const {last, rest} = splitName(n); return last ? last + ' ' + rest : n;
+}
+// Last name for sorting: ignores endings like Jr. or PhD, and keeps particles such as "de la" or "van" with the surname.
+const NAME_SUFFIX = /^(jr|sr|i{2,3}|iv|v|vi|phd|md|dds|dmd|esq|cpa|rn|np|pa|dvm|jd|mba)\.?$/i;
+const NAME_PARTICLE = /^(de|del|della|der|den|di|da|das|dos|du|la|le|las|los|van|von|ter|ten|st\.?|saint|bin|binti|ibn|al|el|ben|mac|ap)$/i;
+function splitName(n){
+  const w = n.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+  while (w.length > 1 && NAME_SUFFIX.test(w[w.length-1])) w.pop();
+  if (w.length < 2) return {last:'', rest:w.join(' ')};
+  let i = w.length - 1;
+  while (i > 1 && NAME_PARTICLE.test(w[i-1])) i--;
+  return {last:w.slice(i).join(' '), rest:w.slice(0, i).join(' ')};
 }
 function sortedPeople(){ return [...S.people.values()].sort((a,b) => sortKey(a).localeCompare(sortKey(b), undefined, {sensitivity:'base'})); }
 function allTags(){ const m = new Map(); for (const p of S.people.values()) for (const t of p.tags||[]) m.set(t.toLowerCase(), t); return [...m.values()].sort((a,b) => a.localeCompare(b)); }
